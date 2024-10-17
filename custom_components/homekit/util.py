@@ -157,6 +157,7 @@ BASIC_INFO_SCHEMA = vol.Schema(
                     DEVICE_AEOTEC_LEAK_SENSOR,
                     DEVICE_BROADLINK_REMOTE,
                     DEVICE_HATCH_REST_PLUS,
+                    DEVICE_RATGDO,
                     DEVICE_SMARTTHINGS_BUTTON,
                     DEVICE_SMARTTHINGS_LEAK_SENSOR,
                     DEVICE_SONY_BRAVIA,

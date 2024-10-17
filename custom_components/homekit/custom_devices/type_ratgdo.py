@@ -5,7 +5,7 @@ import logging
 from ..pyhap.const import CATEGORY_LIGHTBULB
 from pyhap.util import callback as pyhap_callback
 
-from homeassitant.components.light import DOMAIN as DOMAIN_LIGHT
+from homeassistant.components.light import DOMAIN as DOMAIN_LIGHT
 from homeassistant.const import (
     ATTR_ENTITY_ID,
     SERVICE_TURN_OFF,
