@@ -100,6 +100,7 @@ from .custom_devices import (  # noqa: F401
     type_aeotec_leak_sensor,
     type_broadlink_remote,
     type_hatch_rest_plus,
+    type_ratgdo,
     type_smartthings_button,
     type_smartthings_leak_sensor,
     type_sony_bravia,

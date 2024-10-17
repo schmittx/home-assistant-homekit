@@ -66,6 +66,7 @@ from .const import (
     CONF_LINKED_MEDIA_PLAYER,
     CONF_LINKED_MOTION_SENSOR,
     CONF_LINKED_OBSTRUCTION_SENSOR,
+    CONF_LINKED_OCCUPANCY_SENSOR,
     CONF_LINKED_TAMPER_SENSOR,
     CONF_LINKED_TEMPERATURE_SENSOR,
     CONF_LOW_BATTERY_THRESHOLD,
@@ -101,6 +102,7 @@ from .const import (
     DEVICE_AEOTEC_LEAK_SENSOR,
     DEVICE_BROADLINK_REMOTE,
     DEVICE_HATCH_REST_PLUS,
+    DEVICE_RATGDO,
     DEVICE_SMARTTHINGS_BUTTON,
     DEVICE_SMARTTHINGS_LEAK_SENSOR,
     DEVICE_SONY_BRAVIA,
@@ -297,6 +299,10 @@ HATCH_REST_PLUS_SCHEMA = DEVICE_SCHEMA.extend(
     }
 )
 
+RATGDO_SCHEMA = DEVICE_SCHEMA.extend(
+    {vol.Optional(CONF_LINKED_OCCUPANCY_SENSOR): cv.entity_domain(binary_sensor.DOMAIN)}
+)
+
 SMARTTHINGS_BUTTON_SCHEMA = DEVICE_SCHEMA.extend(
     {vol.Optional(CONF_LINKED_TEMPERATURE_SENSOR): cv.entity_domain(sensor.DOMAIN)}
 )
@@ -394,6 +400,9 @@ def validate_entity_config(values: dict) -> dict[str, dict]:
 
             elif device == DEVICE_HATCH_REST_PLUS:
                 config = HATCH_REST_PLUS_SCHEMA(config)
+
+            elif device == DEVICE_RATGDO:
+                config = RATGDO_SCHEMA(config)
 
             elif device == DEVICE_SMARTTHINGS_BUTTON:
                 config = SMARTTHINGS_BUTTON_SCHEMA(config)

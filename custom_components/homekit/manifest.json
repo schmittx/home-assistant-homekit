@@ -26,7 +26,7 @@
     "HAP-python==4.9.1",
     "PyQRCode==1.2.1"
   ],
-  "version": "1.0.0",
+  "version": "1.1.0",
   "zeroconf": [
     "_homekit._tcp.local."
   ]
