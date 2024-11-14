@@ -5,7 +5,7 @@ import logging
 from ..pyhap.const import CATEGORY_ALARM_SYSTEM, CATEGORY_SENSOR
 from pyhap.util import callback as pyhap_callback
 
-from homeassistant.components.alarm_control_panel.const import DOMAIN
+from homeassistant.components.alarm_control_panel.const import DOMAIN, AlarmControlPanelState
 from homeassistant.const import (
     ATTR_CODE,
     ATTR_ENTITY_ID,
@@ -13,13 +13,6 @@ from homeassistant.const import (
     SERVICE_ALARM_ARM_HOME,
     SERVICE_ALARM_ARM_NIGHT,
     SERVICE_ALARM_DISARM,
-    STATE_ALARM_ARMED_AWAY,
-    STATE_ALARM_ARMED_HOME,
-    STATE_ALARM_ARMED_NIGHT,
-    STATE_ALARM_ARMED_VACATION,
-    STATE_ALARM_ARMING,
-    STATE_ALARM_DISARMED,
-    STATE_ALARM_TRIGGERED,
     STATE_ON,
 )
 from homeassistant.core import HassJobType, callback
@@ -53,22 +46,22 @@ HK_ALARM_DISARMED = 3
 HK_ALARM_TRIGGERED = 4
 
 HASS_TO_HOMEKIT_CURRENT = {
-    STATE_ALARM_ARMED_HOME: HK_ALARM_STAY_ARMED,
-    STATE_ALARM_ARMED_VACATION: HK_ALARM_AWAY_ARMED,
-    STATE_ALARM_ARMED_AWAY: HK_ALARM_AWAY_ARMED,
-    STATE_ALARM_ARMED_NIGHT: HK_ALARM_NIGHT_ARMED,
-    STATE_ALARM_ARMING: HK_ALARM_DISARMED,
-    STATE_ALARM_DISARMED: HK_ALARM_DISARMED,
-    STATE_ALARM_TRIGGERED: HK_ALARM_TRIGGERED,
+    AlarmControlPanelState.ARMED_HOME: HK_ALARM_STAY_ARMED,
+    AlarmControlPanelState.ARMED_VACATION: HK_ALARM_AWAY_ARMED,
+    AlarmControlPanelState.ARMED_AWAY: HK_ALARM_AWAY_ARMED,
+    AlarmControlPanelState.ARMED_NIGHT: HK_ALARM_NIGHT_ARMED,
+    AlarmControlPanelState.ARMING: HK_ALARM_DISARMED,
+    AlarmControlPanelState.DISARMED: HK_ALARM_DISARMED,
+    AlarmControlPanelState.TRIGGERED: HK_ALARM_TRIGGERED,
 }
 
 HASS_TO_HOMEKIT_TARGET = {
-    STATE_ALARM_ARMED_HOME: HK_ALARM_STAY_ARMED,
-    STATE_ALARM_ARMED_VACATION: HK_ALARM_AWAY_ARMED,
-    STATE_ALARM_ARMED_AWAY: HK_ALARM_AWAY_ARMED,
-    STATE_ALARM_ARMED_NIGHT: HK_ALARM_NIGHT_ARMED,
-    STATE_ALARM_ARMING: HK_ALARM_AWAY_ARMED,
-    STATE_ALARM_DISARMED: HK_ALARM_DISARMED,
+    AlarmControlPanelState.ARMED_HOME: HK_ALARM_STAY_ARMED,
+    AlarmControlPanelState.ARMED_VACATION: HK_ALARM_AWAY_ARMED,
+    AlarmControlPanelState.ARMED_AWAY: HK_ALARM_AWAY_ARMED,
+    AlarmControlPanelState.ARMED_NIGHT: HK_ALARM_NIGHT_ARMED,
+    AlarmControlPanelState.ARMING: HK_ALARM_AWAY_ARMED,
+    AlarmControlPanelState.DISARMED: HK_ALARM_DISARMED,
 }
 
 HASS_TO_HOMEKIT_SERVICES = {
@@ -121,7 +114,7 @@ class TotalConnectSecuritySystem(HomeAccessory):
 #        current_char = serv_security_system.get_characteristic(CHAR_CURRENT_SECURITY_STATE)
         self.char_current_state = serv_security_system.configure_char(
             CHAR_CURRENT_SECURITY_STATE,
-            value=HASS_TO_HOMEKIT_CURRENT[STATE_ALARM_DISARMED],
+            value=HASS_TO_HOMEKIT_CURRENT[AlarmControlPanelState.DISARMED],
 #            valid_values=current_char.properties.get("ValidValues"),
         )
 
@@ -187,7 +180,7 @@ class TotalConnectSecuritySystem(HomeAccessory):
         if (target_state := HASS_TO_HOMEKIT_TARGET.get(hass_state)) is not None:
             self.char_target_state.set_value(target_state)
 
-        alarm_type = hass_state == STATE_ALARM_TRIGGERED
+        alarm_type = hass_state == AlarmControlPanelState.TRIGGERED
         self.char_alarm_type.set_value(alarm_type)
 
     @callback
