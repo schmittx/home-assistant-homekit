@@ -14,6 +14,8 @@ from homeassistant.const import (
     SERVICE_ALARM_ARM_NIGHT,
     SERVICE_ALARM_DISARM,
     STATE_ON,
+    STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
 )
 from homeassistant.core import HassJobType, callback
 from homeassistant.helpers.event import async_track_state_change_event
@@ -167,8 +169,16 @@ class TotalConnectSecuritySystem(HomeAccessory):
     @callback
     def async_update_state(self, new_state):
         """Update security state after state changed."""
-        hass_state = new_state.state
-        if (current_state := HASS_TO_HOMEKIT_CURRENT.get(hass_state)) is not None:
+        hass_state: str | AlarmControlPanelState = new_state.state
+        if hass_state in {"None", STATE_UNKNOWN, STATE_UNAVAILABLE}:
+            # Bail out early for no state, unknown or unavailable
+            return
+        if hass_state is not None:
+            hass_state = AlarmControlPanelState(hass_state)
+        if (
+            hass_state
+            and (current_state := HASS_TO_HOMEKIT_CURRENT.get(hass_state)) is not None
+        ):
             self.char_current_state.set_value(current_state)
             _LOGGER.debug(
                 "%s: Updated current state to %s (%d)",
@@ -176,12 +186,14 @@ class TotalConnectSecuritySystem(HomeAccessory):
                 hass_state,
                 current_state,
             )
+            alarm_type = hass_state == AlarmControlPanelState.TRIGGERED
+            self.char_alarm_type.set_value(alarm_type)
 
-        if (target_state := HASS_TO_HOMEKIT_TARGET.get(hass_state)) is not None:
+        if (
+            hass_state
+            and (target_state := HASS_TO_HOMEKIT_TARGET.get(hass_state)) is not None
+        ):
             self.char_target_state.set_value(target_state)
-
-        alarm_type = hass_state == AlarmControlPanelState.TRIGGERED
-        self.char_alarm_type.set_value(alarm_type)
 
     @callback
     def _async_update_tamper_sensor_event(self, event):
