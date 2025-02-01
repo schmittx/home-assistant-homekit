@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from ..pyhap.const import CATEGORY_LIGHTBULB
 from pyhap.util import callback as pyhap_callback
@@ -10,12 +11,14 @@ from pyhap.util import callback as pyhap_callback
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
     ATTR_BRIGHTNESS_PCT,
-    ATTR_COLOR_TEMP,
+    ATTR_COLOR_MODE,
+    ATTR_COLOR_TEMP_KELVIN,
     ATTR_HS_COLOR,
     ATTR_RGBW_COLOR,
     ATTR_RGBWW_COLOR,
     ATTR_WHITE,
     DOMAIN as DOMAIN_LIGHT,
+    ColorMode,
 )
 from homeassistant.components.switch import DOMAIN as DOMAIN_SWITCH
 from homeassistant.const import (
@@ -24,12 +27,9 @@ from homeassistant.const import (
     SERVICE_TURN_ON,
     STATE_ON,
 )
-from homeassistant.core import HassJobType, callback
+from homeassistant.core import CALLBACK_TYPE, HassJobType, State, callback
 from homeassistant.helpers.event import async_call_later, async_track_state_change_event
-from homeassistant.util.color import (
-    color_temperature_mired_to_kelvin,
-    color_temperature_to_hs,
-)
+from homeassistant.util.color import color_temperature_to_hs
 
 from ..accessories import TYPES, HomeAccessory
 from ..const import (
@@ -61,10 +61,11 @@ class TuyaStarProjector(HomeAccessory):
     def __init__(self, *args):
         """Initialize a new TuyaStarProjector accessory object."""
         super().__init__(*args, category=CATEGORY_LIGHTBULB)
+        state = self.hass.states.get(self.entity_id)
+        assert state
         prefix = self.config.get(CONF_SERVICE_NAME_PREFIX, self.display_name)
 
         # Power
-        state = self.hass.states.get(self.entity_id)
         power_chars = [
             CHAR_NAME,
             CHAR_ON,
@@ -86,13 +87,15 @@ class TuyaStarProjector(HomeAccessory):
         if self.linked_light_color:
             color_state = self.hass.states.get(self.linked_light_color)
             if color_state:
-                self._color_event_timer = None
-                self._color_pending_events = {}
+                self._color_event_timer: CALLBACK_TYPE | None = None
+                self._color_pending_events: dict[str, Any] = {}
+                self._color_previous_color_mode = color_state.attributes.get(ATTR_COLOR_MODE)
 
                 color_chars = [
                     CHAR_NAME,
                     CHAR_BRIGHTNESS,
                     CHAR_HUE,
+                    CHAR_ON,
                     CHAR_SATURATION,
                 ]
                 serv_color = self.add_preload_service(
@@ -123,11 +126,13 @@ class TuyaStarProjector(HomeAccessory):
         if self.linked_light_laser:
             laser_state = self.hass.states.get(self.linked_light_laser)
             if laser_state:
-                self._laser_event_timer = None
-                self._laser_pending_events = {}
+                self._laser_event_timer: CALLBACK_TYPE | None = None
+                self._laser_pending_events: dict[str, Any] = {}
+                self._laser_previous_color_mode = laser_state.attributes.get(ATTR_COLOR_MODE)
 
                 laser_chars = [
                     CHAR_NAME,
+                    CHAR_ON,
                     CHAR_BRIGHTNESS,
                 ]
                 serv_laser = self.add_preload_service(
@@ -191,14 +196,17 @@ class TuyaStarProjector(HomeAccessory):
         self._async_update_laser_state(event.data.get("new_state"))
 
     @callback
-    def _async_update_color_state(self, new_state):
+    def _async_update_color_state(self, new_state: State):
         """Handle linked light state change to update HomeKit value."""
         if not new_state:
             return
 
         state = new_state.state
         attributes = new_state.attributes
+        color_mode = attributes.get(ATTR_COLOR_MODE)
         self.color_char_on.set_value(int(state == STATE_ON))
+        color_mode_changed = self._color_previous_color_mode != color_mode
+        self._color_previous_color_mode = color_mode
 
         # Handle brightness
         if (
@@ -219,14 +227,20 @@ class TuyaStarProjector(HomeAccessory):
             if brightness == 0 and state == STATE_ON:
                 brightness = 1
             self.color_char_brightness.set_value(brightness)
+            if color_mode_changed:
+                self.color_char_brightness.notify()
 
         # Handle Color - color must always be set before color temperature
         # or the iOS UI will not display it correctly.
-        if color_temp := attributes.get(ATTR_COLOR_TEMP):
-            hue, saturation = color_temperature_to_hs(
-                color_temperature_mired_to_kelvin(color_temp)
-            )
-        elif hue_sat := attributes.get(ATTR_HS_COLOR):
+        if color_temp := attributes.get(ATTR_COLOR_TEMP_KELVIN):
+            hue, saturation = color_temperature_to_hs(color_temp)
+        elif color_mode == ColorMode.WHITE:
+            hue, saturation = 0, 0
+        elif (
+            (hue_sat := attributes.get(ATTR_HS_COLOR))
+            and isinstance(hue_sat, (list, tuple))
+            and len(hue_sat) == 2
+        ):
             hue, saturation = hue_sat
         else:
             hue = None
@@ -234,6 +248,10 @@ class TuyaStarProjector(HomeAccessory):
         if isinstance(hue, (int, float)) and isinstance(saturation, (int, float)):
             self.color_char_hue.set_value(round(hue, 0))
             self.color_char_saturation.set_value(round(saturation, 0))
+            if color_mode_changed:
+                # If the color temp changed, be sure to force the color to update
+                self.color_char_hue.notify()
+                self.color_char_saturation.notify()
 
     @callback
     def _async_update_laser_state(self, new_state):
@@ -243,7 +261,10 @@ class TuyaStarProjector(HomeAccessory):
 
         state = new_state.state
         attributes = new_state.attributes
+        color_mode = attributes.get(ATTR_COLOR_MODE)
         self.laser_char_on.set_value(int(state == STATE_ON))
+        color_mode_changed = self._laser_previous_color_mode != color_mode
+        self._laser_previous_color_mode = color_mode
 
         # Handle brightness
         if (
@@ -264,6 +285,8 @@ class TuyaStarProjector(HomeAccessory):
             if brightness == 0 and state == STATE_ON:
                 brightness = 1
             self.laser_char_brightness.set_value(brightness)
+            if color_mode_changed:
+                self.laser_char_brightness.notify()
 
     def set_state(self, value):
         """Move switch state to value if call came from HomeKit."""

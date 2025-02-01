@@ -12,7 +12,7 @@ from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
     ATTR_BRIGHTNESS_PCT,
     ATTR_COLOR_MODE,
-    ATTR_COLOR_TEMP,
+    ATTR_COLOR_TEMP_KELVIN,
     ATTR_HS_COLOR,
     ATTR_RGBW_COLOR,
     ATTR_RGBWW_COLOR,
@@ -42,7 +42,6 @@ from homeassistant.core import CALLBACK_TYPE, HassJobType, State, callback
 from homeassistant.helpers.event import async_call_later, async_track_state_change_event
 from homeassistant.util.color import (
     color_temperature_kelvin_to_mired,
-    color_temperature_mired_to_kelvin,
     color_temperature_to_hs,
 )
 
@@ -344,13 +343,15 @@ class HatchRestPlus(HomeAccessory):
 
         # Handle Color - color must always be set before color temperature
         # or the iOS UI will not display it correctly.
-        if color_temp := attributes.get(ATTR_COLOR_TEMP):
-            hue, saturation = color_temperature_to_hs(
-                color_temperature_mired_to_kelvin(color_temp)
-            )
+        if color_temp := attributes.get(ATTR_COLOR_TEMP_KELVIN):
+            hue, saturation = color_temperature_to_hs(color_temp)
         elif color_mode == ColorMode.WHITE:
             hue, saturation = 0, 0
-        elif hue_sat := attributes.get(ATTR_HS_COLOR):
+        elif (
+            (hue_sat := attributes.get(ATTR_HS_COLOR))
+            and isinstance(hue_sat, (list, tuple))
+            and len(hue_sat) == 2
+        ):
             hue, saturation = hue_sat
         else:
             hue = None
