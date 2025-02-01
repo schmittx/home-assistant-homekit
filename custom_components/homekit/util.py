@@ -434,7 +434,7 @@ def validate_entity_config(values: dict) -> dict[str, dict]:
             else:
                 config = DEVICE_SCHEMA(config)
 
-        if domain == "alarm_control_panel":
+        elif domain == "alarm_control_panel":
             config = CODE_SCHEMA(config)
 
         elif domain == media_player.const.DOMAIN:
