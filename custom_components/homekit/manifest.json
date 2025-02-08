@@ -22,11 +22,11 @@
   ],
   "requirements": [
     "base36==0.1.1",
-    "fnv-hash-fast==1.0.2",
+    "fnv-hash-fast==1.2.2",
     "HAP-python==4.9.2",
     "PyQRCode==1.2.1"
   ],
-  "version": "1.1.8",
+  "version": "1.1.9",
   "zeroconf": [
     "_homekit._tcp.local."
   ]
