@@ -2,28 +2,25 @@
 
 import logging
 
-from ..pyhap.const import CATEGORY_SENSOR
-from pyhap.util import callback as pyhap_callback
-
-from homeassistant.const import (
-    ATTR_UNIT_OF_MEASUREMENT,
-    UnitOfTemperature,
-)
-from homeassistant.core import HassJobType, callback
-from homeassistant.helpers.event import async_track_state_change_event
-
-from ..accessories import TYPES, HomeAccessory
-from ..const import (
+from custom_components.homekit.accessories import TYPES, HomeAccessory
+from custom_components.homekit.const import (
     CHAR_CURRENT_HUMIDITY,
     CHAR_CURRENT_TEMPERATURE,
     CHAR_NAME,
     CONF_LINKED_HUMIDITY_SENSOR,
-    CONF_SERVICE_NAME_PREFIX,
     MAX_NAME_LENGTH,
     SERV_HUMIDITY_SENSOR,
     SERV_TEMPERATURE_SENSOR,
 )
-from ..util import convert_to_float, temperature_to_homekit
+from custom_components.homekit.pyhap.const import CATEGORY_SENSOR
+from custom_components.homekit.util import convert_to_float, temperature_to_homekit
+from pyhap.util import callback as pyhap_callback
+
+from homeassistant.const import ATTR_UNIT_OF_MEASUREMENT, UnitOfTemperature
+from homeassistant.core import HassJobType, callback
+from homeassistant.helpers.event import async_track_state_change_event
+
+from .const import CONF_SERVICE_NAME_PREFIX
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,31 +29,39 @@ _LOGGER = logging.getLogger(__name__)
 class BroadlinkRemote(HomeAccessory):
     """Generate a BroadlinkRemote accessory."""
 
-    def __init__(self, *args):
+    def __init__(self, *args) -> None:
         """Initialize a BroadlinkRemote accessory object."""
         super().__init__(*args, category=CATEGORY_SENSOR)
         prefix = self.config.get(CONF_SERVICE_NAME_PREFIX, self.display_name)
 
         # Temperature Sensor
         state = self.hass.states.get(self.entity_id)
+        assert state
         temperature_chars = [
             CHAR_NAME,
             CHAR_CURRENT_TEMPERATURE,
         ]
         serv_temperature = self.add_preload_service(
-            SERV_TEMPERATURE_SENSOR, temperature_chars,
+            SERV_TEMPERATURE_SENSOR,
+            temperature_chars,
         )
         serv_temperature.configure_char(
-            CHAR_NAME, value=f"{prefix} Temperature"[:MAX_NAME_LENGTH],
+            CHAR_NAME,
+            value=f"{prefix} Temperature"[:MAX_NAME_LENGTH],
         )
         self.char_temperature = serv_temperature.configure_char(
-            CHAR_CURRENT_TEMPERATURE, value=0,
+            CHAR_CURRENT_TEMPERATURE,
+            value=0,
         )
 
         # Humidity Sensor
         self.linked_humidity_sensor = self.config.get(CONF_LINKED_HUMIDITY_SENSOR)
-        _LOGGER.debug(f"{self.entity_id}: Found linked humidity sensor {self.linked_humidity_sensor}")
         if self.linked_humidity_sensor:
+            _LOGGER.debug(
+                "%s: Found linked humidity sensor %s",
+                self.entity_id,
+                self.linked_humidity_sensor,
+            )
             humidity_sensor_state = self.hass.states.get(self.linked_humidity_sensor)
             if humidity_sensor_state:
                 humidity_chars = [
@@ -64,13 +69,16 @@ class BroadlinkRemote(HomeAccessory):
                     CHAR_CURRENT_HUMIDITY,
                 ]
                 serv_humidity = self.add_preload_service(
-                    SERV_HUMIDITY_SENSOR, temperature_chars,
+                    SERV_HUMIDITY_SENSOR,
+                    humidity_chars,
                 )
                 serv_humidity.configure_char(
-                    CHAR_NAME, value=f"{prefix} Humidity"[:MAX_NAME_LENGTH],
+                    CHAR_NAME,
+                    value=f"{prefix} Humidity"[:MAX_NAME_LENGTH],
                 )
                 self.char_humidity = serv_humidity.configure_char(
-                    CHAR_CURRENT_HUMIDITY, value=0,
+                    CHAR_CURRENT_HUMIDITY,
+                    value=0,
                 )
                 self._async_update_humidity_sensor_state(humidity_sensor_state)
 

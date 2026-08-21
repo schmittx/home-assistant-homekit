@@ -1,10 +1,10 @@
 """This module contains constants used by other modules."""
-MAJOR_VERSION = 4
-MINOR_VERSION = 9
-PATCH_VERSION = 2
+
+MAJOR_VERSION = 5
+MINOR_VERSION = 0
+PATCH_VERSION = 0
 __short_version__ = f"{MAJOR_VERSION}.{MINOR_VERSION}"
 __version__ = f"{__short_version__}.{PATCH_VERSION}"
-REQUIRED_PYTHON_VER = (3, 7)
 
 BASE_UUID = "-0000-1000-8000-0026BB765291"
 
@@ -86,6 +86,8 @@ HAP_PROTOCOL_SHORT_VERSION = "1.1"
 
 # Status codes for underlying HAP calls
 class HAP_SERVER_STATUS:
+    """HAP Server Status."""
+
     SUCCESS = 0
     INSUFFICIENT_PRIVILEGES = -70401
     SERVICE_COMMUNICATION_FAILURE = -70402
@@ -101,6 +103,8 @@ class HAP_SERVER_STATUS:
 
 
 class HAP_PERMISSIONS:
+    """HAP Permissions."""
+
     USER = b"\x00"
     ADMIN = b"\x01"
 

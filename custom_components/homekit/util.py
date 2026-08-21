@@ -1,8 +1,6 @@
 # Custom Component
 """Collection of useful functions for the HomeKit component."""
 
-from __future__ import annotations
-
 import io
 import ipaddress
 import logging
@@ -18,6 +16,7 @@ import voluptuous as vol
 
 from homeassistant.components import (
     binary_sensor,
+    input_number,
     light,
     media_player,
     persistent_notification,
@@ -26,6 +25,11 @@ from homeassistant.components import (
 from homeassistant.components.camera import DOMAIN as CAMERA_DOMAIN
 from homeassistant.components.event import DOMAIN as EVENT_DOMAIN
 from homeassistant.components.lock import DOMAIN as LOCK_DOMAIN
+from homeassistant.components.media_player import (
+    DOMAIN as MEDIA_PLAYER_DOMAIN,
+    MediaPlayerDeviceClass,
+    MediaPlayerEntityFeature,
+)
 from homeassistant.components.remote import DOMAIN as REMOTE_DOMAIN, RemoteEntityFeature
 from homeassistant.const import (
     ATTR_CODE,
@@ -37,7 +41,14 @@ from homeassistant.const import (
     CONF_TYPE,
     UnitOfTemperature,
 )
-from homeassistant.core import Event, EventStateChangedData, HomeAssistant, State, callback, split_entity_id
+from homeassistant.core import (
+    Event,
+    EventStateChangedData,
+    HomeAssistant,
+    State,
+    callback,
+    split_entity_id,
+)
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.storage import STORAGE_DIR
 from homeassistant.util.unit_conversion import TemperatureConverter
@@ -45,36 +56,27 @@ from homeassistant.util.unit_conversion import TemperatureConverter
 from .const import (
     AUDIO_CODEC_COPY,
     AUDIO_CODEC_OPUS,
-    CONF_ACCESSORY_INFO_MANUFACTURER,
-    CONF_ACCESSORY_INFO_MODEL,
-    CONF_ACCESSORY_INFO_SERIAL_NUMBER,
     CONF_AUDIO_CODEC,
     CONF_AUDIO_MAP,
     CONF_AUDIO_PACKET_SIZE,
     CONF_FEATURE,
     CONF_FEATURE_LIST,
-    CONF_INPUT_DEVICE_TYPE,
-    CONF_INPUT_SOURCE_TYPE,
     CONF_LINKED_BATTERY_CHARGING_SENSOR,
     CONF_LINKED_BATTERY_SENSOR,
     CONF_LINKED_DOORBELL_SENSOR,
+    CONF_LINKED_FILTER_CHANGE_INDICATION,
+    CONF_LINKED_FILTER_LIFE_LEVEL,
     CONF_LINKED_HUMIDITY_SENSOR,
-    CONF_LINKED_LIGHT,
-    CONF_LINKED_LIGHT_COLOR,
-    CONF_LINKED_LIGHT_LASER,
-    CONF_LINKED_LOW_BATTERY_SENSOR,
-    CONF_LINKED_MEDIA_PLAYER,
     CONF_LINKED_MOTION_SENSOR,
     CONF_LINKED_OBSTRUCTION_SENSOR,
-    CONF_LINKED_OCCUPANCY_SENSOR,
-    CONF_LINKED_TAMPER_SENSOR,
+    CONF_LINKED_PM25_SENSOR,
     CONF_LINKED_TEMPERATURE_SENSOR,
+    CONF_LINKED_VALVE_DURATION,
+    CONF_LINKED_VALVE_END_TIME,
     CONF_LOW_BATTERY_THRESHOLD,
     CONF_MAX_FPS,
     CONF_MAX_HEIGHT,
     CONF_MAX_WIDTH,
-    CONF_SOURCE,
-    CONF_SOURCE_CONFIG,
     CONF_STREAM_ADDRESS,
     CONF_STREAM_COUNT,
     CONF_STREAM_SOURCE,
@@ -88,9 +90,6 @@ from .const import (
     DEFAULT_AUDIO_CODEC,
     DEFAULT_AUDIO_MAP,
     DEFAULT_AUDIO_PACKET_SIZE,
-    CONF_SERVICE_NAME_PREFIX,
-    DEFAULT_INPUT_DEVICE_TYPE,
-    DEFAULT_INPUT_SOURCE_TYPE,
     DEFAULT_LOW_BATTERY_THRESHOLD,
     DEFAULT_MAX_FPS,
     DEFAULT_MAX_HEIGHT,
@@ -101,6 +100,46 @@ from .const import (
     DEFAULT_VIDEO_MAP,
     DEFAULT_VIDEO_PACKET_SIZE,
     DEFAULT_VIDEO_PROFILE_NAMES,
+    DOMAIN,
+    FEATURE_ON_OFF,
+    FEATURE_PLAY_PAUSE,
+    FEATURE_PLAY_STOP,
+    FEATURE_TOGGLE_MUTE,
+    MAX_NAME_LENGTH,
+    TYPE_AIR_PURIFIER,
+    TYPE_FAN,
+    TYPE_FAUCET,
+    TYPE_HEATER_COOLER,
+    TYPE_OUTLET,
+    TYPE_SHOWER,
+    TYPE_SPRINKLER,
+    TYPE_SWITCH,
+    TYPE_THERMOSTAT,
+    TYPE_VALVE,
+    VIDEO_CODEC_COPY,
+    VIDEO_CODEC_H264_OMX,
+    VIDEO_CODEC_H264_QSV,
+    VIDEO_CODEC_H264_V4L2M2M,
+    VIDEO_CODEC_LIBX264,
+)
+from .custom_devices.const import (
+    CONF_ACCESSORY_INFO_MANUFACTURER,
+    CONF_ACCESSORY_INFO_MODEL,
+    CONF_ACCESSORY_INFO_SERIAL_NUMBER,
+    CONF_INPUT_DEVICE_TYPE,
+    CONF_INPUT_SOURCE_TYPE,
+    CONF_LINKED_LIGHT,
+    CONF_LINKED_LIGHT_COLOR,
+    CONF_LINKED_LIGHT_LASER,
+    CONF_LINKED_LOW_BATTERY_SENSOR,
+    CONF_LINKED_MEDIA_PLAYER,
+    CONF_LINKED_OCCUPANCY_SENSOR,
+    CONF_LINKED_TAMPER_SENSOR,
+    CONF_SERVICE_NAME_PREFIX,
+    CONF_SOURCE,
+    CONF_SOURCE_CONFIG,
+    DEFAULT_INPUT_DEVICE_TYPE,
+    DEFAULT_INPUT_SOURCE_TYPE,
     DEVICE_AEOTEC_LEAK_SENSOR,
     DEVICE_BROADLINK_REMOTE,
     DEVICE_HATCH_REST_PLUS,
@@ -112,28 +151,13 @@ from .const import (
     DEVICE_TOTAL_CONNECT_SECURITY_SYSTEM,
     DEVICE_TOTAL_CONNECT_SMOKE_SENSOR,
     DEVICE_TUYA_STAR_PROJECTOR,
-    DOMAIN,
-    FEATURE_ON_OFF,
-    FEATURE_PLAY_PAUSE,
-    FEATURE_PLAY_STOP,
-    FEATURE_TOGGLE_MUTE,
-    MAX_NAME_LENGTH,
     INPUT_DEVICE_TYPES,
     INPUT_SOURCE_TYPES,
-    TYPE_FAUCET,
-    TYPE_OUTLET,
-    TYPE_SHOWER,
-    TYPE_SPRINKLER,
-    TYPE_SWITCH,
-    TYPE_VALVE,
-    VIDEO_CODEC_COPY,
-    VIDEO_CODEC_H264_OMX,
-    VIDEO_CODEC_H264_V4L2M2M,
-    VIDEO_CODEC_LIBX264,
 )
 from .models import HomeKitConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
+
 
 NUMBERS_ONLY_RE = re.compile(r"[^\d.]+")
 VERSION_RE = re.compile(r"([0-9]+)(\.[0-9]+)?(\.[0-9]+)?")
@@ -145,6 +169,7 @@ MAX_PORT = 65535
 VALID_VIDEO_CODECS = [
     VIDEO_CODEC_LIBX264,
     VIDEO_CODEC_H264_OMX,
+    VIDEO_CODEC_H264_QSV,
     VIDEO_CODEC_H264_V4L2M2M,
     AUDIO_CODEC_COPY,
 ]
@@ -235,11 +260,47 @@ HUMIDIFIER_SCHEMA = BASIC_INFO_SCHEMA.extend(
     {vol.Optional(CONF_LINKED_HUMIDITY_SENSOR): cv.entity_domain(sensor.DOMAIN)}
 )
 
+FAN_SCHEMA = BASIC_INFO_SCHEMA.extend(
+    {
+        vol.Optional(CONF_TYPE, default=TYPE_FAN): vol.All(
+            cv.string,
+            vol.In(
+                (
+                    TYPE_FAN,
+                    TYPE_AIR_PURIFIER,
+                )
+            ),
+        ),
+        vol.Optional(CONF_LINKED_HUMIDITY_SENSOR): cv.entity_domain(sensor.DOMAIN),
+        vol.Optional(CONF_LINKED_PM25_SENSOR): cv.entity_domain(sensor.DOMAIN),
+        vol.Optional(CONF_LINKED_TEMPERATURE_SENSOR): cv.entity_domain(sensor.DOMAIN),
+        vol.Optional(CONF_LINKED_FILTER_CHANGE_INDICATION): cv.entity_domain(
+            binary_sensor.DOMAIN
+        ),
+        vol.Optional(CONF_LINKED_FILTER_LIFE_LEVEL): cv.entity_domain(sensor.DOMAIN),
+    }
+)
+
 COVER_SCHEMA = BASIC_INFO_SCHEMA.extend(
     {
         vol.Optional(CONF_LINKED_OBSTRUCTION_SENSOR): cv.entity_domain(
             binary_sensor.DOMAIN
         )
+    }
+)
+
+# No default so an unset type keeps the automatic Thermostat/HeaterCooler routing.
+CLIMATE_SCHEMA = BASIC_INFO_SCHEMA.extend(
+    {
+        vol.Optional(CONF_TYPE): vol.All(
+            cv.string,
+            vol.In(
+                (
+                    TYPE_HEATER_COOLER,
+                    TYPE_THERMOSTAT,
+                )
+            ),
+        ),
     }
 )
 
@@ -285,7 +346,9 @@ SWITCH_TYPE_SCHEMA = BASIC_INFO_SCHEMA.extend(
                     TYPE_VALVE,
                 )
             ),
-        )
+        ),
+        vol.Optional(CONF_LINKED_VALVE_DURATION): cv.entity_domain(input_number.DOMAIN),
+        vol.Optional(CONF_LINKED_VALVE_END_TIME): cv.entity_domain(sensor.DOMAIN),
     }
 )
 
@@ -293,6 +356,13 @@ SENSOR_SCHEMA = BASIC_INFO_SCHEMA.extend(
     {
         vol.Optional(CONF_THRESHOLD_CO): vol.Any(None, cv.positive_int),
         vol.Optional(CONF_THRESHOLD_CO2): vol.Any(None, cv.positive_int),
+    }
+)
+
+VALVE_SCHEMA = BASIC_INFO_SCHEMA.extend(
+    {
+        vol.Optional(CONF_LINKED_VALVE_DURATION): cv.entity_domain(input_number.DOMAIN),
+        vol.Optional(CONF_LINKED_VALVE_END_TIME): cv.entity_domain(sensor.DOMAIN),
     }
 )
 
@@ -328,14 +398,20 @@ SMARTTHINGS_LEAK_SENSOR_SCHEMA = DEVICE_SCHEMA.extend(
 SONY_BRAVIA_SOURCE_CONFIG_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_SOURCE): cv.string,
-        vol.Optional(CONF_INPUT_DEVICE_TYPE, default=DEFAULT_INPUT_DEVICE_TYPE): vol.All(cv.string, vol.In(INPUT_DEVICE_TYPES.keys())),
-        vol.Optional(CONF_INPUT_SOURCE_TYPE, default=DEFAULT_INPUT_SOURCE_TYPE): vol.All(cv.string, vol.In(INPUT_SOURCE_TYPES.keys())),
+        vol.Optional(
+            CONF_INPUT_DEVICE_TYPE, default=DEFAULT_INPUT_DEVICE_TYPE
+        ): vol.All(cv.string, vol.In(INPUT_DEVICE_TYPES.keys())),
+        vol.Optional(
+            CONF_INPUT_SOURCE_TYPE, default=DEFAULT_INPUT_SOURCE_TYPE
+        ): vol.All(cv.string, vol.In(INPUT_SOURCE_TYPES.keys())),
     }
 )
 
 SONY_BRAVIA_SCHEMA = DEVICE_SCHEMA.extend(
     {
-        vol.Optional(CONF_SOURCE_CONFIG, default=[]): vol.All(cv.ensure_list, [SONY_BRAVIA_SOURCE_CONFIG_SCHEMA]),
+        vol.Optional(CONF_SOURCE_CONFIG, default=[]): vol.All(
+            cv.ensure_list, [SONY_BRAVIA_SOURCE_CONFIG_SCHEMA]
+        ),
     }
 )
 
@@ -344,7 +420,11 @@ TOTAL_CONNECT_SCHEMA = DEVICE_SCHEMA.extend(
 )
 
 TOTAL_CONNECT_SENSOR_SCHEMA = TOTAL_CONNECT_SCHEMA.extend(
-    {vol.Optional(CONF_LINKED_LOW_BATTERY_SENSOR): cv.entity_domain(binary_sensor.DOMAIN)}
+    {
+        vol.Optional(CONF_LINKED_LOW_BATTERY_SENSOR): cv.entity_domain(
+            binary_sensor.DOMAIN
+        )
+    }
 )
 
 TUYA_STAR_PROJECTOR_SCHEMA = DEVICE_SCHEMA.extend(
@@ -353,8 +433,6 @@ TUYA_STAR_PROJECTOR_SCHEMA = DEVICE_SCHEMA.extend(
         vol.Optional(CONF_LINKED_LIGHT_LASER): cv.entity_domain(light.DOMAIN),
     }
 )
-
-# Custom Schema
 
 HOMEKIT_CHAR_TRANSLATIONS = {
     0: " ",  # nul
@@ -430,7 +508,10 @@ def validate_entity_config(values: dict) -> dict[str, dict]:
             elif device == DEVICE_TOTAL_CONNECT_SECURITY_SYSTEM:
                 config = TOTAL_CONNECT_SCHEMA(config)
 
-            elif device in [DEVICE_TOTAL_CONNECT_CONTACT_SENSOR, DEVICE_TOTAL_CONNECT_SMOKE_SENSOR]:
+            elif device in [
+                DEVICE_TOTAL_CONNECT_CONTACT_SENSOR,
+                DEVICE_TOTAL_CONNECT_SMOKE_SENSOR,
+            ]:
                 config = TOTAL_CONNECT_SENSOR_SCHEMA(config)
 
             elif device == DEVICE_TUYA_STAR_PROJECTOR:
@@ -465,11 +546,20 @@ def validate_entity_config(values: dict) -> dict[str, dict]:
         elif domain == "humidifier":
             config = HUMIDIFIER_SCHEMA(config)
 
+        elif domain == "climate":
+            config = CLIMATE_SCHEMA(config)
+
         elif domain == "cover":
             config = COVER_SCHEMA(config)
 
+        elif domain == "fan":
+            config = FAN_SCHEMA(config)
+
         elif domain == "sensor":
             config = SENSOR_SCHEMA(config)
+
+        elif domain == "valve":
+            config = VALVE_SCHEMA(config)
 
         else:
             config = BASIC_INFO_SCHEMA(config)
@@ -484,14 +574,14 @@ def get_media_player_features(state: State) -> list[str]:
 
     supported_modes = []
     if features & (
-        media_player.MediaPlayerEntityFeature.TURN_ON | media_player.MediaPlayerEntityFeature.TURN_OFF
+        MediaPlayerEntityFeature.TURN_ON | MediaPlayerEntityFeature.TURN_OFF
     ):
         supported_modes.append(FEATURE_ON_OFF)
-    if features & (media_player.MediaPlayerEntityFeature.PLAY | media_player.MediaPlayerEntityFeature.PAUSE):
+    if features & (MediaPlayerEntityFeature.PLAY | MediaPlayerEntityFeature.PAUSE):
         supported_modes.append(FEATURE_PLAY_PAUSE)
-    if features & (media_player.MediaPlayerEntityFeature.PLAY | media_player.MediaPlayerEntityFeature.STOP):
+    if features & (MediaPlayerEntityFeature.PLAY | MediaPlayerEntityFeature.STOP):
         supported_modes.append(FEATURE_PLAY_STOP)
-    if features & media_player.const.MediaPlayerEntityFeature.VOLUME_MUTE:
+    if features & MediaPlayerEntityFeature.VOLUME_MUTE:
         supported_modes.append(FEATURE_TOGGLE_MUTE)
     return supported_modes
 
@@ -552,7 +642,7 @@ def convert_to_float(state: Any) -> float | None:
     """Return float of state, catch errors."""
     try:
         return float(state)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return None
 
 
@@ -560,7 +650,7 @@ def coerce_int(state: str) -> int:
     """Return int."""
     try:
         return int(state)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return 0
 
 
@@ -590,23 +680,8 @@ def temperature_to_states(temperature: float, unit: str) -> float:
     return TemperatureConverter.convert(temperature, UnitOfTemperature.CELSIUS, unit)
 
 
-def co2_to_air_quality(co2: float) -> int:
-    """Map CO2 level to HomeKit AirQuality level."""
-    if co2 is None:
-        return 0
-    if co2 <= 500:
-        return 1
-    if co2 <= 1000:
-        return 2
-    if co2 <= 1500:
-        return 3
-    if co2 <= 2000:
-        return 4
-    return 5
-
-
 def density_to_air_quality(density: float) -> int:
-    """Map PM2.5 µg/m3 density to HomeKit AirQuality level."""
+    """Map PM2.5 μg/m3 density to HomeKit AirQuality level."""
     if density <= 9:  # US AQI 0-50 (HomeKit: Excellent)
         return 1
     if density <= 35.4:  # US AQI 51-100 (HomeKit: Good)
@@ -619,7 +694,7 @@ def density_to_air_quality(density: float) -> int:
 
 
 def density_to_air_quality_pm10(density: float) -> int:
-    """Map PM10 µg/m3 density to HomeKit AirQuality level."""
+    """Map PM10 μg/m3 density to HomeKit AirQuality level."""
     if density <= 54:  # US AQI 0-50 (HomeKit: Excellent)
         return 1
     if density <= 154:  # US AQI 51-100 (HomeKit: Good)
@@ -632,7 +707,7 @@ def density_to_air_quality_pm10(density: float) -> int:
 
 
 def density_to_air_quality_nitrogen_dioxide(density: float) -> int:
-    """Map nitrogen dioxide µg/m3 to HomeKit AirQuality level."""
+    """Map nitrogen dioxide μg/m3 to HomeKit AirQuality level."""
     if density <= 30:
         return 1
     if density <= 60:
@@ -645,9 +720,10 @@ def density_to_air_quality_nitrogen_dioxide(density: float) -> int:
 
 
 def density_to_air_quality_voc(density: float) -> int:
-    """Map VOCs µg/m3 to HomeKit AirQuality level.
+    """Map VOCs μg/m3 to HomeKit AirQuality level.
 
-    The VOC mappings use the IAQ guidelines for Europe released by the WHO (World Health Organization).
+    The VOC mappings use the IAQ guidelines for Europe released
+    by the WHO (World Health Organization).
     Referenced from Sensirion_Gas_Sensors_SGP3x_TVOC_Concept.pdf
     https://github.com/paulvha/svm30/blob/master/extras/Sensirion_Gas_Sensors_SGP3x_TVOC_Concept.pdf
     """
@@ -718,12 +794,12 @@ def _is_zero_but_true(value: Any) -> bool:
 def remove_state_files_for_entry_id(hass: HomeAssistant, entry_id: str) -> None:
     """Remove the state files from disk."""
     for path in (
-            get_persist_fullpath_for_entry_id(hass, entry_id),
-            get_aid_storage_fullpath_for_entry_id(hass, entry_id),
-            get_iid_storage_fullpath_for_entry_id(hass, entry_id),
-        ):
-            if os.path.exists(path):
-                os.unlink(path)
+        get_persist_fullpath_for_entry_id(hass, entry_id),
+        get_aid_storage_fullpath_for_entry_id(hass, entry_id),
+        get_iid_storage_fullpath_for_entry_id(hass, entry_id),
+    ):
+        if os.path.exists(path):
+            os.unlink(path)
 
 
 def _get_test_socket() -> socket.socket:
@@ -737,10 +813,13 @@ def _get_test_socket() -> socket.socket:
 @callback
 def async_port_is_available(port: int) -> bool:
     """Check to see if a port is available."""
+    test_socket = _get_test_socket()
     try:
-        _get_test_socket().bind(("", port))
+        test_socket.bind(("", port))
     except OSError:
         return False
+    finally:
+        test_socket.close()
     return True
 
 
@@ -764,11 +843,12 @@ def _async_find_next_available_port(start_port: int, exclude_ports: set) -> int:
             continue
         try:
             test_socket.bind(("", port))
-            return port
         except OSError:
             if port == MAX_PORT:
                 raise
             continue
+        else:
+            return port
     raise RuntimeError("unreachable")
 
 
@@ -776,10 +856,9 @@ def pid_is_alive(pid: int) -> bool:
     """Check to see if a process is alive."""
     try:
         os.kill(pid, 0)
-        return True
     except OSError:
-        pass
-    return False
+        return False
+    return True
 
 
 def accessory_friendly_name(hass_name: str, accessory: Accessory) -> str:
@@ -798,18 +877,24 @@ def accessory_friendly_name(hass_name: str, accessory: Accessory) -> str:
 
 
 def state_needs_accessory_mode(state: State) -> bool:
-    """Return if the entity represented by the state must be paired in accessory mode."""
+    """Return if the entity state must be paired in accessory mode."""
     if state.domain in (CAMERA_DOMAIN, LOCK_DOMAIN):
         return True
 
     return (
-        state.domain == media_player.DOMAIN
+        state.domain == MEDIA_PLAYER_DOMAIN
         and state.attributes.get(ATTR_DEVICE_CLASS)
-        in (media_player.MediaPlayerDeviceClass.TV, media_player.MediaPlayerDeviceClass.RECEIVER)
-        or state.domain == REMOTE_DOMAIN
+        in (
+            MediaPlayerDeviceClass.TV,
+            MediaPlayerDeviceClass.RECEIVER,
+            MediaPlayerDeviceClass.PROJECTOR,
+        )
+    ) or (
+        state.domain == REMOTE_DOMAIN
         and state.attributes.get(ATTR_SUPPORTED_FEATURES, 0)
         & RemoteEntityFeature.ACTIVITY
     )
+
 
 def state_changed_event_is_same_state(event: Event[EventStateChangedData]) -> bool:
     """Check if a state changed event is the same state."""
@@ -821,6 +906,7 @@ def state_changed_event_is_same_state(event: Event[EventStateChangedData]) -> bo
 
 def get_min_max(value1: float, value2: float) -> tuple[float, float]:
     """Return the minimum and maximum of two values.
+
     HomeKit will go unavailable if the min and max are reversed
     so we make sure the min is always the min and the max is always the max
     as any mistakes made in integrations will cause the entire

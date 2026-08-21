@@ -1,11 +1,9 @@
 # Custom Component
 """Class to hold all sensor accessories."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 import logging
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, override
 
 from pyhap.const import CATEGORY_SENSOR
 from pyhap.service import Service
@@ -22,10 +20,6 @@ from homeassistant.core import State, callback
 
 from .accessories import TYPES, HomeAccessory
 from .const import (
-    ATTR_AVAILABLE,
-    ATTR_LOW_BATTERY,
-    ATTR_TAMPER_DETECTED,
-    ATTR_TAMPERED,
     CHAR_AIR_PARTICULATE_DENSITY,
     CHAR_AIR_QUALITY,
     CHAR_CARBON_DIOXIDE_DETECTED,
@@ -45,9 +39,7 @@ from .const import (
     CHAR_PM10_DENSITY,
     CHAR_PM25_DENSITY,
     CHAR_SMOKE_DETECTED,
-    CHAR_STATUS_ACTIVE,
     CHAR_STATUS_LOW_BATTERY,
-    CHAR_STATUS_TAMPERED,
     CHAR_VOC_DENSITY,
     CONF_THRESHOLD_CO,
     CONF_THRESHOLD_CO2,
@@ -67,6 +59,14 @@ from .const import (
     SERV_TEMPERATURE_SENSOR,
     THRESHOLD_CO,
     THRESHOLD_CO2,
+)
+from .custom_devices.const import (
+    ATTR_AVAILABLE,
+    ATTR_LOW_BATTERY,
+    ATTR_TAMPER_DETECTED,
+    ATTR_TAMPERED,
+    CHAR_STATUS_ACTIVE,
+    CHAR_STATUS_TAMPERED,
 )
 from .util import (
     convert_to_float,
@@ -137,6 +137,7 @@ class TemperatureSensor(HomeAccessory):
         self.async_update_state(state)
 
     @callback
+    @override
     def async_update_state(self, new_state: State) -> None:
         """Update temperature after state changed."""
         unit = new_state.attributes.get(
@@ -168,6 +169,7 @@ class HumiditySensor(HomeAccessory):
         self.async_update_state(state)
 
     @callback
+    @override
     def async_update_state(self, new_state: State) -> None:
         """Update accessory after state change."""
         if (humidity := convert_to_float(new_state.state)) is not None:
@@ -201,6 +203,7 @@ class AirQualitySensor(HomeAccessory):
         )
 
     @callback
+    @override
     def async_update_state(self, new_state: State) -> None:
         """Update accessory after state change."""
         if (density := convert_to_float(new_state.state)) is not None:
@@ -216,6 +219,7 @@ class AirQualitySensor(HomeAccessory):
 class PM10Sensor(AirQualitySensor):
     """Generate a PM10Sensor accessory as PM 10 sensor."""
 
+    @override
     def create_services(self) -> None:
         """Override the init function for PM 10 Sensor."""
         serv_air_quality = self.add_preload_service(
@@ -225,6 +229,7 @@ class PM10Sensor(AirQualitySensor):
         self.char_density = serv_air_quality.configure_char(CHAR_PM10_DENSITY, value=0)
 
     @callback
+    @override
     def async_update_state(self, new_state: State) -> None:
         """Update accessory after state change."""
         density = convert_to_float(new_state.state)
@@ -243,6 +248,7 @@ class PM10Sensor(AirQualitySensor):
 class PM25Sensor(AirQualitySensor):
     """Generate a PM25Sensor accessory as PM 2.5 sensor."""
 
+    @override
     def create_services(self) -> None:
         """Override the init function for PM 2.5 Sensor."""
         serv_air_quality = self.add_preload_service(
@@ -252,6 +258,7 @@ class PM25Sensor(AirQualitySensor):
         self.char_density = serv_air_quality.configure_char(CHAR_PM25_DENSITY, value=0)
 
     @callback
+    @override
     def async_update_state(self, new_state: State) -> None:
         """Update accessory after state change."""
         density = convert_to_float(new_state.state)
@@ -270,6 +277,7 @@ class PM25Sensor(AirQualitySensor):
 class NitrogenDioxideSensor(AirQualitySensor):
     """Generate a NitrogenDioxideSensor accessory as NO2 sensor."""
 
+    @override
     def create_services(self) -> None:
         """Override the init function for PM 2.5 Sensor."""
         serv_air_quality = self.add_preload_service(
@@ -281,6 +289,7 @@ class NitrogenDioxideSensor(AirQualitySensor):
         )
 
     @callback
+    @override
     def async_update_state(self, new_state: State) -> None:
         """Update accessory after state change."""
         density = convert_to_float(new_state.state)
@@ -299,9 +308,10 @@ class NitrogenDioxideSensor(AirQualitySensor):
 class VolatileOrganicCompoundsSensor(AirQualitySensor):
     """Generate a VolatileOrganicCompoundsSensor accessory as VOCs sensor.
 
-    Sensor entity must return VOC in µg/m3.
+    Sensor entity must return VOC in μg/m3.
     """
 
+    @override
     def create_services(self) -> None:
         """Override the init function for VOC Sensor."""
         serv_air_quality: Service = self.add_preload_service(
@@ -318,6 +328,7 @@ class VolatileOrganicCompoundsSensor(AirQualitySensor):
         )
 
     @callback
+    @override
     def async_update_state(self, new_state: State) -> None:
         """Update accessory after state change."""
         density = convert_to_float(new_state.state)
@@ -361,6 +372,7 @@ class CarbonMonoxideSensor(HomeAccessory):
         self.async_update_state(state)
 
     @callback
+    @override
     def async_update_state(self, new_state: State) -> None:
         """Update accessory after state change."""
         if (value := convert_to_float(new_state.state)) is not None:
@@ -401,6 +413,7 @@ class CarbonDioxideSensor(HomeAccessory):
         self.async_update_state(state)
 
     @callback
+    @override
     def async_update_state(self, new_state: State) -> None:
         """Update accessory after state change."""
         if (value := convert_to_float(new_state.state)) is not None:
@@ -430,6 +443,7 @@ class LightSensor(HomeAccessory):
         self.async_update_state(state)
 
     @callback
+    @override
     def async_update_state(self, new_state: State) -> None:
         """Update accessory after state change."""
         if (luminance := convert_to_float(new_state.state)) is not None:
@@ -476,22 +490,19 @@ class BinarySensor(HomeAccessory):
             service_char.char, value=initial_value
         )
         if self.support_active:
-            self.char_active = service.configure_char(
-                CHAR_STATUS_ACTIVE, value=0
-        )
+            self.char_active = service.configure_char(CHAR_STATUS_ACTIVE, value=0)
         if self.support_low_battery:
             self.char_low_battery = service.configure_char(
                 CHAR_STATUS_LOW_BATTERY, value=0
-        )
+            )
         if self.support_tamper_detected or self.support_tampered:
-            self.char_tampered = service.configure_char(
-                CHAR_STATUS_TAMPERED, value=0
-        )
+            self.char_tampered = service.configure_char(CHAR_STATUS_TAMPERED, value=0)
         # Set the state so it is in sync on initial
         # GET to avoid an event storm after homekit startup
         self.async_update_state(state)
 
     @callback
+    @override
     def async_update_state(self, new_state: State) -> None:
         """Update accessory after state change."""
         state = new_state.state

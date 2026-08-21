@@ -2,10 +2,26 @@
 
 import logging
 
-from ..pyhap.const import CATEGORY_ALARM_SYSTEM, CATEGORY_SENSOR
+from custom_components.homekit.accessories import TYPES, HomeAccessory
+from custom_components.homekit.const import (
+    CHAR_CONTACT_SENSOR_STATE,
+    CHAR_CURRENT_SECURITY_STATE,
+    CHAR_NAME,
+    CHAR_SMOKE_DETECTED,
+    CHAR_STATUS_LOW_BATTERY,
+    CHAR_TARGET_SECURITY_STATE,
+    MAX_NAME_LENGTH,
+    SERV_CONTACT_SENSOR,
+    SERV_SECURITY_SYSTEM,
+    SERV_SMOKE_SENSOR,
+)
+from custom_components.homekit.pyhap.const import CATEGORY_ALARM_SYSTEM, CATEGORY_SENSOR
 from pyhap.util import callback as pyhap_callback
 
-from homeassistant.components.alarm_control_panel.const import DOMAIN, AlarmControlPanelState
+from homeassistant.components.alarm_control_panel import (
+    DOMAIN as ALARM_CONTROL_PANEL_DOMAIN,
+    AlarmControlPanelState,
+)
 from homeassistant.const import (
     ATTR_CODE,
     ATTR_ENTITY_ID,
@@ -20,23 +36,12 @@ from homeassistant.const import (
 from homeassistant.core import HassJobType, callback
 from homeassistant.helpers.event import async_track_state_change_event
 
-from ..accessories import TYPES, HomeAccessory
-from ..const import (
-    CHAR_CURRENT_SECURITY_STATE,
-    CHAR_CONTACT_SENSOR_STATE,
-    CHAR_NAME,
+from .const import (
     CHAR_SECURITY_SYSTEM_ALARM_TYPE,
-    CHAR_SMOKE_DETECTED,
-    CHAR_STATUS_LOW_BATTERY,
     CHAR_STATUS_TAMPERED,
-    CHAR_TARGET_SECURITY_STATE,
     CONF_LINKED_LOW_BATTERY_SENSOR,
     CONF_LINKED_TAMPER_SENSOR,
     CONF_SERVICE_NAME_PREFIX,
-    MAX_NAME_LENGTH,
-    SERV_CONTACT_SENSOR,
-    SERV_SECURITY_SYSTEM,
-    SERV_SMOKE_SENSOR,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -85,7 +90,7 @@ HK_TO_SERVICE = {
 class TotalConnectSecuritySystem(HomeAccessory):
     """Generate a TotalConnectSecuritySystem accessory."""
 
-    def __init__(self, *args):
+    def __init__(self, *args) -> None:
         """Initialize a TotalConnectSecuritySystem accessory object."""
         super().__init__(*args, category=CATEGORY_ALARM_SYSTEM)
         self._alarm_code = self.config.get(ATTR_CODE)
@@ -98,8 +103,12 @@ class TotalConnectSecuritySystem(HomeAccessory):
         ]
 
         self.linked_tamper_sensor = self.config.get(CONF_LINKED_TAMPER_SENSOR)
-        _LOGGER.debug(f"{self.entity_id}: Found linked tamper sensor {self.linked_tamper_sensor}")
         if self.linked_tamper_sensor:
+            _LOGGER.debug(
+                "%s: Found linked tamper sensor %s",
+                self.entity_id,
+                self.linked_tamper_sensor,
+            )
             tamper_sensor_state = self.hass.states.get(self.linked_tamper_sensor)
             if tamper_sensor_state:
                 security_system_chars.append(CHAR_STATUS_TAMPERED)
@@ -110,35 +119,39 @@ class TotalConnectSecuritySystem(HomeAccessory):
 
         prefix = self.config.get(CONF_SERVICE_NAME_PREFIX, self.display_name)
         serv_security_system.configure_char(
-            CHAR_NAME, value=f"{prefix} Security System"[:MAX_NAME_LENGTH],
+            CHAR_NAME,
+            value=f"{prefix} Security System"[:MAX_NAME_LENGTH],
         )
 
-#        current_char = serv_security_system.get_characteristic(CHAR_CURRENT_SECURITY_STATE)
+        #        current_char = serv_security_system.get_characteristic(CHAR_CURRENT_SECURITY_STATE)
         self.char_current_state = serv_security_system.configure_char(
             CHAR_CURRENT_SECURITY_STATE,
             value=HASS_TO_HOMEKIT_CURRENT[AlarmControlPanelState.DISARMED],
-#            valid_values=current_char.properties.get("ValidValues"),
+            #            valid_values=current_char.properties.get("ValidValues"),
         )
 
-#        target_char = serv_security_system.get_characteristic(CHAR_TARGET_SECURITY_STATE)
+        #        target_char = serv_security_system.get_characteristic(CHAR_TARGET_SECURITY_STATE)
         self.char_target_state = serv_security_system.configure_char(
             CHAR_TARGET_SECURITY_STATE,
             value=HASS_TO_HOMEKIT_SERVICES[SERVICE_ALARM_DISARM],
-#            valid_values=target_char.properties.get("ValidValues"),
+            #            valid_values=target_char.properties.get("ValidValues"),
             setter_callback=self.set_security_state,
         )
 
         self.char_alarm_type = serv_security_system.configure_char(
-            CHAR_SECURITY_SYSTEM_ALARM_TYPE, value=0,
+            CHAR_SECURITY_SYSTEM_ALARM_TYPE,
+            value=0,
         )
 
         if CHAR_STATUS_TAMPERED in security_system_chars:
             self.char_tamper_detected = serv_security_system.configure_char(
-                CHAR_STATUS_TAMPERED, value=0,
+                CHAR_STATUS_TAMPERED,
+                value=0,
             )
             self._async_update_tamper_sensor_state(tamper_sensor_state)
 
         state = self.hass.states.get(self.entity_id)
+        assert state
         self.async_update_state(state)
 
     def set_security_state(self, value):
@@ -149,7 +162,7 @@ class TotalConnectSecuritySystem(HomeAccessory):
         params = {ATTR_ENTITY_ID: self.entity_id}
         if self._alarm_code:
             params[ATTR_CODE] = self._alarm_code
-        self.async_call_service(DOMAIN, service, params)
+        self.async_call_service(ALARM_CONTROL_PANEL_DOMAIN, service, params)
 
     @callback
     @pyhap_callback
@@ -215,7 +228,7 @@ class TotalConnectSecuritySystem(HomeAccessory):
 class TotalConnectContactSensor(HomeAccessory):
     """Generate a TotalConnectContactSensor accessory."""
 
-    def __init__(self, *args):
+    def __init__(self, *args) -> None:
         """Initialize a TotalConnectContactSensor accessory object."""
         super().__init__(*args, category=CATEGORY_SENSOR)
 
@@ -225,45 +238,61 @@ class TotalConnectContactSensor(HomeAccessory):
         ]
 
         self.linked_low_battery_sensor = self.config.get(CONF_LINKED_LOW_BATTERY_SENSOR)
-        _LOGGER.debug(f"{self.entity_id}: Found linked low battery sensor {self.linked_low_battery_sensor}")
         if self.linked_low_battery_sensor:
-            low_battery_sensor_state = self.hass.states.get(self.linked_low_battery_sensor)
+            _LOGGER.debug(
+                "%s: Found linked low battery sensor %s",
+                self.entity_id,
+                self.linked_low_battery_sensor,
+            )
+            low_battery_sensor_state = self.hass.states.get(
+                self.linked_low_battery_sensor
+            )
             if low_battery_sensor_state:
                 contact_chars.append(CHAR_STATUS_LOW_BATTERY)
 
         self.linked_tamper_sensor = self.config.get(CONF_LINKED_TAMPER_SENSOR)
-        _LOGGER.debug(f"{self.entity_id}: Found linked tamper sensor {self.linked_tamper_sensor}")
         if self.linked_tamper_sensor:
+            _LOGGER.debug(
+                "%s: Found linked tamper sensor %s",
+                self.entity_id,
+                self.linked_tamper_sensor,
+            )
             tamper_sensor_state = self.hass.states.get(self.linked_tamper_sensor)
             if tamper_sensor_state:
                 contact_chars.append(CHAR_STATUS_TAMPERED)
 
         serv_contact = self.add_preload_service(
-            SERV_CONTACT_SENSOR, contact_chars,
+            SERV_CONTACT_SENSOR,
+            contact_chars,
         )
 
         prefix = self.config.get(CONF_SERVICE_NAME_PREFIX, self.display_name)
         serv_contact.configure_char(
-            CHAR_NAME, value=f"{prefix} Contact"[:MAX_NAME_LENGTH],
+            CHAR_NAME,
+            value=f"{prefix} Contact"[:MAX_NAME_LENGTH],
         )
 
         self.char_contact_detected = serv_contact.configure_char(
-            CHAR_CONTACT_SENSOR_STATE, value=0,
+            CHAR_CONTACT_SENSOR_STATE,
+            value=0,
         )
 
         if CHAR_STATUS_LOW_BATTERY in contact_chars:
             self.char_low_battery_detected = serv_contact.configure_char(
-                CHAR_STATUS_LOW_BATTERY, value=0,
+                CHAR_STATUS_LOW_BATTERY,
+                value=0,
             )
             self._async_update_low_battery_sensor_state(low_battery_sensor_state)
 
         if CHAR_STATUS_TAMPERED in contact_chars:
             self.char_tamper_detected = serv_contact.configure_char(
-                CHAR_STATUS_TAMPERED, value=0,
+                CHAR_STATUS_TAMPERED,
+                value=0,
             )
             self._async_update_tamper_sensor_state(tamper_sensor_state)
 
         state = self.hass.states.get(self.entity_id)
+        assert state
         self.async_update_state(state)
 
     @callback
@@ -332,7 +361,7 @@ class TotalConnectContactSensor(HomeAccessory):
 class TotalConnectSmokeSensor(HomeAccessory):
     """Generate a TotalConnectSmokeSensor accessory."""
 
-    def __init__(self, *args):
+    def __init__(self, *args) -> None:
         """Initialize a TotalConnectSmokeSensor accessory object."""
         super().__init__(*args, category=CATEGORY_SENSOR)
 
@@ -342,45 +371,61 @@ class TotalConnectSmokeSensor(HomeAccessory):
         ]
 
         self.linked_low_battery_sensor = self.config.get(CONF_LINKED_LOW_BATTERY_SENSOR)
-        _LOGGER.debug(f"{self.entity_id}: Found linked low battery sensor {self.linked_low_battery_sensor}")
         if self.linked_low_battery_sensor:
-            low_battery_sensor_state = self.hass.states.get(self.linked_low_battery_sensor)
+            _LOGGER.debug(
+                "%s: Found linked low battery sensor %s",
+                self.entity_id,
+                self.linked_low_battery_sensor,
+            )
+            low_battery_sensor_state = self.hass.states.get(
+                self.linked_low_battery_sensor
+            )
             if low_battery_sensor_state:
                 smoke_chars.append(CHAR_STATUS_LOW_BATTERY)
 
         self.linked_tamper_sensor = self.config.get(CONF_LINKED_TAMPER_SENSOR)
-        _LOGGER.debug(f"{self.entity_id}: Found linked tamper sensor {self.linked_tamper_sensor}")
         if self.linked_tamper_sensor:
+            _LOGGER.debug(
+                "%s: Found linked tamper sensor %s",
+                self.entity_id,
+                self.linked_tamper_sensor,
+            )
             tamper_sensor_state = self.hass.states.get(self.linked_tamper_sensor)
             if tamper_sensor_state:
                 smoke_chars.append(CHAR_STATUS_TAMPERED)
 
         serv_smoke = self.add_preload_service(
-            SERV_SMOKE_SENSOR, smoke_chars,
+            SERV_SMOKE_SENSOR,
+            smoke_chars,
         )
 
         prefix = self.config.get(CONF_SERVICE_NAME_PREFIX, self.display_name)
         serv_smoke.configure_char(
-            CHAR_NAME, value=f"{prefix} Smoke"[:MAX_NAME_LENGTH],
+            CHAR_NAME,
+            value=f"{prefix} Smoke"[:MAX_NAME_LENGTH],
         )
 
         self.char_smoke_detected = serv_smoke.configure_char(
-            CHAR_SMOKE_DETECTED, value=0,
+            CHAR_SMOKE_DETECTED,
+            value=0,
         )
 
         if CHAR_STATUS_LOW_BATTERY in smoke_chars:
             self.char_low_battery_detected = serv_smoke.configure_char(
-                CHAR_STATUS_LOW_BATTERY, value=0,
+                CHAR_STATUS_LOW_BATTERY,
+                value=0,
             )
             self._async_update_low_battery_sensor_state(low_battery_sensor_state)
 
         if CHAR_STATUS_TAMPERED in smoke_chars:
             self.char_tamper_detected = serv_smoke.configure_char(
-                CHAR_STATUS_TAMPERED, value=0,
+                CHAR_STATUS_TAMPERED,
+                value=0,
             )
             self._async_update_tamper_sensor_state(tamper_sensor_state)
 
         state = self.hass.states.get(self.entity_id)
+        assert state
         self.async_update_state(state)
 
     @callback

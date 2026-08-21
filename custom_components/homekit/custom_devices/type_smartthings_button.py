@@ -2,7 +2,18 @@
 
 import logging
 
-from ..pyhap.const import CATEGORY_PROGRAMMABLE_SWITCH
+from custom_components.homekit.accessories import TYPES, HomeAccessory
+from custom_components.homekit.const import (
+    CHAR_CURRENT_TEMPERATURE,
+    CHAR_NAME,
+    CHAR_PROGRAMMABLE_SWITCH_EVENT,
+    CONF_LINKED_TEMPERATURE_SENSOR,
+    MAX_NAME_LENGTH,
+    SERV_STATELESS_PROGRAMMABLE_SWITCH,
+    SERV_TEMPERATURE_SENSOR,
+)
+from custom_components.homekit.pyhap.const import CATEGORY_PROGRAMMABLE_SWITCH
+from custom_components.homekit.util import convert_to_float, temperature_to_homekit
 from pyhap.util import callback as pyhap_callback
 
 from homeassistant.components.event import ATTR_EVENT_TYPE
@@ -14,18 +25,7 @@ from homeassistant.const import (
 from homeassistant.core import HassJobType, callback
 from homeassistant.helpers.event import async_track_state_change_event
 
-from ..accessories import TYPES, HomeAccessory
-from ..const import (
-    CHAR_CURRENT_TEMPERATURE,
-    CHAR_NAME,
-    CHAR_PROGRAMMABLE_SWITCH_EVENT,
-    CONF_LINKED_TEMPERATURE_SENSOR,
-    CONF_SERVICE_NAME_PREFIX,
-    MAX_NAME_LENGTH,
-    SERV_STATELESS_PROGRAMMABLE_SWITCH,
-    SERV_TEMPERATURE_SENSOR,
-)
-from ..util import convert_to_float, temperature_to_homekit
+from .const import CONF_SERVICE_NAME_PREFIX
 
 SWITCH_EVENT_MAP = {
     "pushed": 0,
@@ -40,22 +40,25 @@ _LOGGER = logging.getLogger(__name__)
 class SmartThingsButton(HomeAccessory):
     """Generate a SmartThingsButton accessory."""
 
-    def __init__(self, *args):
+    def __init__(self, *args) -> None:
         """Initialize a SmartThingsButton accessory object."""
         super().__init__(*args, category=CATEGORY_PROGRAMMABLE_SWITCH)
         prefix = self.config.get(CONF_SERVICE_NAME_PREFIX, self.display_name)
 
         # Button
         state = self.hass.states.get(self.entity_id)
+        assert state
         switch_chars = [
             CHAR_NAME,
             CHAR_PROGRAMMABLE_SWITCH_EVENT,
         ]
         serv_switch = self.add_preload_service(
-            SERV_STATELESS_PROGRAMMABLE_SWITCH, switch_chars,
+            SERV_STATELESS_PROGRAMMABLE_SWITCH,
+            switch_chars,
         )
         serv_switch.configure_char(
-            CHAR_NAME, value=f"{prefix} Switch"[:MAX_NAME_LENGTH],
+            CHAR_NAME,
+            value=f"{prefix} Switch"[:MAX_NAME_LENGTH],
         )
         self.char_switch_event = serv_switch.configure_char(
             CHAR_PROGRAMMABLE_SWITCH_EVENT,
@@ -64,22 +67,31 @@ class SmartThingsButton(HomeAccessory):
 
         # Temperature Sensor
         self.linked_temperature_sensor = self.config.get(CONF_LINKED_TEMPERATURE_SENSOR)
-        _LOGGER.debug(f"{self.entity_id}: Found linked temperature sensor {self.linked_temperature_sensor}")
         if self.linked_temperature_sensor:
-            temperature_sensor_state = self.hass.states.get(self.linked_temperature_sensor)
+            _LOGGER.debug(
+                "%s: Found linked temperature sensor %s",
+                self.entity_id,
+                self.linked_temperature_sensor,
+            )
+            temperature_sensor_state = self.hass.states.get(
+                self.linked_temperature_sensor
+            )
             if temperature_sensor_state:
                 temperature_chars = [
                     CHAR_NAME,
                     CHAR_CURRENT_TEMPERATURE,
                 ]
                 serv_temperature = self.add_preload_service(
-                    SERV_TEMPERATURE_SENSOR, temperature_chars,
+                    SERV_TEMPERATURE_SENSOR,
+                    temperature_chars,
                 )
                 serv_temperature.configure_char(
-                    CHAR_NAME, value=f"{prefix} Temperature"[:MAX_NAME_LENGTH],
+                    CHAR_NAME,
+                    value=f"{prefix} Temperature"[:MAX_NAME_LENGTH],
                 )
                 self.char_temperature = serv_temperature.configure_char(
-                    CHAR_CURRENT_TEMPERATURE, value=0,
+                    CHAR_CURRENT_TEMPERATURE,
+                    value=0,
                 )
                 self._async_update_temperature_sensor_state(temperature_sensor_state)
 
@@ -104,9 +116,10 @@ class SmartThingsButton(HomeAccessory):
     def async_update_state(self, new_state):
         """Update accessory after state change."""
         if new_state.state != STATE_UNKNOWN:
-            attrs = new_state.attributes
-            switch_event = SWITCH_EVENT_MAP[attrs.get(ATTR_EVENT_TYPE)]
-            if new_state.state != self.old_state:
+            event_type = new_state.attributes.get(ATTR_EVENT_TYPE)
+            assert event_type
+            switch_event = SWITCH_EVENT_MAP.get(event_type)
+            if switch_event is not None and new_state.state != self.old_state:
                 self.char_switch_event.set_value(switch_event)
                 self.old_state = new_state.state
 

@@ -1,11 +1,22 @@
 """Class to hold a custom Tuya star projector accessory."""
 
-from __future__ import annotations
-
 import logging
 from typing import Any
 
-from ..pyhap.const import CATEGORY_LIGHTBULB
+from custom_components.homekit.accessories import TYPES, HomeAccessory
+from custom_components.homekit.const import (
+    CHAR_BRIGHTNESS,
+    CHAR_COLOR_TEMPERATURE,
+    CHAR_HUE,
+    CHAR_NAME,
+    CHAR_ON,
+    CHAR_SATURATION,
+    MAX_NAME_LENGTH,
+    SERV_LIGHTBULB,
+    SERV_SWITCH,
+)
+from custom_components.homekit.pyhap.const import CATEGORY_LIGHTBULB
+from custom_components.homekit.type_lights import CHANGE_COALESCE_TIME_WINDOW
 from pyhap.util import callback as pyhap_callback
 
 from homeassistant.components.light import (
@@ -17,10 +28,10 @@ from homeassistant.components.light import (
     ATTR_RGBW_COLOR,
     ATTR_RGBWW_COLOR,
     ATTR_WHITE,
-    DOMAIN as DOMAIN_LIGHT,
+    DOMAIN as LIGHT_DOMAIN,
     ColorMode,
 )
-from homeassistant.components.switch import DOMAIN as DOMAIN_SWITCH
+from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN
 from homeassistant.const import (
     ATTR_ENTITY_ID,
     SERVICE_TURN_OFF,
@@ -31,22 +42,11 @@ from homeassistant.core import CALLBACK_TYPE, HassJobType, State, callback
 from homeassistant.helpers.event import async_call_later, async_track_state_change_event
 from homeassistant.util.color import color_temperature_to_hs
 
-from ..accessories import TYPES, HomeAccessory
-from ..const import (
-    CHAR_BRIGHTNESS,
-    CHAR_COLOR_TEMPERATURE,
-    CHAR_HUE,
-    CHAR_NAME,
-    CHAR_ON,
-    CHAR_SATURATION,
+from .const import (
     CONF_LINKED_LIGHT_COLOR,
     CONF_LINKED_LIGHT_LASER,
     CONF_SERVICE_NAME_PREFIX,
-    MAX_NAME_LENGTH,
-    SERV_LIGHTBULB,
-    SERV_SWITCH,
 )
-from ..type_lights import CHANGE_COALESCE_TIME_WINDOW
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ class TuyaStarProjector(HomeAccessory):
     Currently supports: state, brightness, color temperature, rgb_color.
     """
 
-    def __init__(self, *args):
+    def __init__(self, *args) -> None:
         """Initialize a new TuyaStarProjector accessory object."""
         super().__init__(*args, category=CATEGORY_LIGHTBULB)
         state = self.hass.states.get(self.entity_id)
@@ -71,11 +71,13 @@ class TuyaStarProjector(HomeAccessory):
             CHAR_ON,
         ]
         serv_power = self.add_preload_service(
-            SERV_SWITCH, power_chars,
+            SERV_SWITCH,
+            power_chars,
         )
         self.set_primary_service(serv_power)
         serv_power.configure_char(
-            CHAR_NAME, value=f"{prefix} Power"[:MAX_NAME_LENGTH],
+            CHAR_NAME,
+            value=f"{prefix} Power"[:MAX_NAME_LENGTH],
         )
         self.power_char_on = serv_power.configure_char(
             CHAR_ON, value=False, setter_callback=self.set_state
@@ -83,13 +85,19 @@ class TuyaStarProjector(HomeAccessory):
 
         # Color
         self.linked_light_color = self.config.get(CONF_LINKED_LIGHT_COLOR)
-        _LOGGER.debug(f"{self.entity_id}: Found linked light for color {self.linked_light_color}")
         if self.linked_light_color:
+            _LOGGER.debug(
+                "%s: Found linked light for color %s",
+                self.entity_id,
+                self.linked_light_color,
+            )
             color_state = self.hass.states.get(self.linked_light_color)
             if color_state:
                 self._color_event_timer: CALLBACK_TYPE | None = None
                 self._color_pending_events: dict[str, Any] = {}
-                self._color_previous_color_mode = color_state.attributes.get(ATTR_COLOR_MODE)
+                self._color_previous_color_mode = color_state.attributes.get(
+                    ATTR_COLOR_MODE
+                )
 
                 color_chars = [
                     CHAR_NAME,
@@ -99,36 +107,49 @@ class TuyaStarProjector(HomeAccessory):
                     CHAR_SATURATION,
                 ]
                 serv_color = self.add_preload_service(
-                    SERV_LIGHTBULB, color_chars, "color_service",
+                    SERV_LIGHTBULB,
+                    color_chars,
+                    "color_service",
                 )
                 serv_power.add_linked_service(serv_color)
                 serv_color.configure_char(
-                    CHAR_NAME, value=f"{prefix} Color"[:MAX_NAME_LENGTH],
+                    CHAR_NAME,
+                    value=f"{prefix} Color"[:MAX_NAME_LENGTH],
                 )
                 self.color_char_on = serv_color.configure_char(
-                    CHAR_ON, value=0,
+                    CHAR_ON,
+                    value=0,
                 )
                 self.color_char_brightness = serv_color.configure_char(
-                    CHAR_BRIGHTNESS, value=100,
+                    CHAR_BRIGHTNESS,
+                    value=100,
                 )
                 self.color_char_hue = serv_color.configure_char(
-                    CHAR_HUE, value=0,
+                    CHAR_HUE,
+                    value=0,
                 )
                 self.color_char_saturation = serv_color.configure_char(
-                    CHAR_SATURATION, value=75,
+                    CHAR_SATURATION,
+                    value=75,
                 )
                 self._async_update_color_state(color_state)
                 serv_color.setter_callback = self._set_color_chars
 
         # Laser
         self.linked_light_laser = self.config.get(CONF_LINKED_LIGHT_LASER)
-        _LOGGER.debug(f"{self.entity_id}: Found linked light for laser {self.linked_light_laser}")
         if self.linked_light_laser:
+            _LOGGER.debug(
+                "%s: Found linked light for laser %s",
+                self.entity_id,
+                self.linked_light_laser,
+            )
             laser_state = self.hass.states.get(self.linked_light_laser)
             if laser_state:
                 self._laser_event_timer: CALLBACK_TYPE | None = None
                 self._laser_pending_events: dict[str, Any] = {}
-                self._laser_previous_color_mode = laser_state.attributes.get(ATTR_COLOR_MODE)
+                self._laser_previous_color_mode = laser_state.attributes.get(
+                    ATTR_COLOR_MODE
+                )
 
                 laser_chars = [
                     CHAR_NAME,
@@ -136,17 +157,22 @@ class TuyaStarProjector(HomeAccessory):
                     CHAR_BRIGHTNESS,
                 ]
                 serv_laser = self.add_preload_service(
-                    SERV_LIGHTBULB, laser_chars, "laser_service",
+                    SERV_LIGHTBULB,
+                    laser_chars,
+                    "laser_service",
                 )
                 serv_power.add_linked_service(serv_laser)
                 serv_laser.configure_char(
-                    CHAR_NAME, value=f"{prefix} Laser"[:MAX_NAME_LENGTH],
+                    CHAR_NAME,
+                    value=f"{prefix} Laser"[:MAX_NAME_LENGTH],
                 )
                 self.laser_char_on = serv_laser.configure_char(
-                    CHAR_ON, value=0,
+                    CHAR_ON,
+                    value=0,
                 )
                 self.laser_char_brightness = serv_laser.configure_char(
-                    CHAR_BRIGHTNESS, value=100,
+                    CHAR_BRIGHTNESS,
+                    value=100,
                 )
                 self._async_update_laser_state(laser_state)
                 serv_laser.setter_callback = self._set_laser_chars
@@ -209,9 +235,8 @@ class TuyaStarProjector(HomeAccessory):
         self._color_previous_color_mode = color_mode
 
         # Handle brightness
-        if (
-            (brightness := attributes.get(ATTR_BRIGHTNESS)) is not None
-            and isinstance(brightness, (int, float))
+        if (brightness := attributes.get(ATTR_BRIGHTNESS)) is not None and isinstance(
+            brightness, (int, float)
         ):
             brightness = round(brightness / 255 * 100, 0)
             # The homeassistant component might report its brightness as 0 but is
@@ -267,9 +292,8 @@ class TuyaStarProjector(HomeAccessory):
         self._laser_previous_color_mode = color_mode
 
         # Handle brightness
-        if (
-            (brightness := attributes.get(ATTR_BRIGHTNESS)) is not None
-            and isinstance(brightness, (int, float))
+        if (brightness := attributes.get(ATTR_BRIGHTNESS)) is not None and isinstance(
+            brightness, (int, float)
         ):
             brightness = round(brightness / 255 * 100, 0)
             # The homeassistant component might report its brightness as 0 but is
@@ -293,7 +317,7 @@ class TuyaStarProjector(HomeAccessory):
         _LOGGER.debug("%s: Set switch state to %s", self.entity_id, value)
         params = {ATTR_ENTITY_ID: self.entity_id}
         service = SERVICE_TURN_ON if value else SERVICE_TURN_OFF
-        self.async_call_service(DOMAIN_SWITCH, service, params)
+        self.async_call_service(SWITCH_DOMAIN, service, params)
 
     def _set_color_chars(self, char_values):
         _LOGGER.debug("Light _set_chars: %s", char_values)
@@ -303,7 +327,10 @@ class TuyaStarProjector(HomeAccessory):
         ):
             del self._color_pending_events[CHAR_COLOR_TEMPERATURE]
         for char in (CHAR_HUE, CHAR_SATURATION):
-            if char in self._color_pending_events and CHAR_COLOR_TEMPERATURE in char_values:
+            if (
+                char in self._color_pending_events
+                and CHAR_COLOR_TEMPERATURE in char_values
+            ):
                 del self._color_pending_events[char]
 
         self._color_pending_events.update(char_values)
@@ -321,7 +348,10 @@ class TuyaStarProjector(HomeAccessory):
         ):
             del self._laser_pending_events[CHAR_COLOR_TEMPERATURE]
         for char in (CHAR_HUE, CHAR_SATURATION):
-            if char in self._laser_pending_events and CHAR_COLOR_TEMPERATURE in char_values:
+            if (
+                char in self._laser_pending_events
+                and CHAR_COLOR_TEMPERATURE in char_values
+            ):
                 del self._laser_pending_events[char]
 
         self._laser_pending_events.update(char_values)
@@ -357,7 +387,10 @@ class TuyaStarProjector(HomeAccessory):
 
         if service == SERVICE_TURN_OFF:
             self.async_call_service(
-                DOMAIN_LIGHT, service, {ATTR_ENTITY_ID: self.linked_light_color}, ", ".join(events)
+                LIGHT_DOMAIN,
+                service,
+                {ATTR_ENTITY_ID: self.linked_light_color},
+                ", ".join(events),
             )
             return
 
@@ -389,7 +422,7 @@ class TuyaStarProjector(HomeAccessory):
         _LOGGER.debug(
             "Calling light service with params: %s -> %s", char_values, params
         )
-        self.async_call_service(DOMAIN_LIGHT, service, params, ", ".join(events))
+        self.async_call_service(LIGHT_DOMAIN, service, params, ", ".join(events))
 
     @callback
     def _async_send_laser_events(self, *_):
@@ -417,7 +450,10 @@ class TuyaStarProjector(HomeAccessory):
 
         if service == SERVICE_TURN_OFF:
             self.async_call_service(
-                DOMAIN_LIGHT, service, {ATTR_ENTITY_ID: self.linked_light_laser}, ", ".join(events)
+                LIGHT_DOMAIN,
+                service,
+                {ATTR_ENTITY_ID: self.linked_light_laser},
+                ", ".join(events),
             )
             return
 
@@ -431,4 +467,4 @@ class TuyaStarProjector(HomeAccessory):
         _LOGGER.debug(
             "Calling light service with params: %s -> %s", char_values, params
         )
-        self.async_call_service(DOMAIN_LIGHT, service, params, ", ".join(events))
+        self.async_call_service(LIGHT_DOMAIN, service, params, ", ".join(events))

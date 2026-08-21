@@ -2,22 +2,24 @@
 
 import logging
 
-from ..pyhap.const import CATEGORY_SENSOR
+from custom_components.homekit.accessories import TYPES, HomeAccessory
+from custom_components.homekit.const import (
+    CHAR_LEAK_DETECTED,
+    CHAR_NAME,
+    MAX_NAME_LENGTH,
+    SERV_LEAK_SENSOR,
+)
+from custom_components.homekit.pyhap.const import CATEGORY_SENSOR
 from pyhap.util import callback as pyhap_callback
 
 from homeassistant.const import STATE_ON
 from homeassistant.core import HassJobType, callback
 from homeassistant.helpers.event import async_track_state_change_event
 
-from ..accessories import TYPES, HomeAccessory
-from ..const import (
-    CHAR_LEAK_DETECTED,
-    CHAR_NAME,
+from .const import (
     CHAR_STATUS_TAMPERED,
     CONF_LINKED_TAMPER_SENSOR,
     CONF_SERVICE_NAME_PREFIX,
-    MAX_NAME_LENGTH,
-    SERV_LEAK_SENSOR,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -27,38 +29,48 @@ _LOGGER = logging.getLogger(__name__)
 class AeotecLeakSensor(HomeAccessory):
     """Generate a AeotecLeakSensor accessory."""
 
-    def __init__(self, *args):
+    def __init__(self, *args) -> None:
         """Initialize a AeotecLeakSensor accessory object."""
         super().__init__(*args, category=CATEGORY_SENSOR)
         prefix = self.config.get(CONF_SERVICE_NAME_PREFIX, self.display_name)
 
         # Leak Sensor
         state = self.hass.states.get(self.entity_id)
+        assert state
         leak_chars = [
             CHAR_NAME,
             CHAR_LEAK_DETECTED,
         ]
 
         self.linked_tamper_sensor = self.config.get(CONF_LINKED_TAMPER_SENSOR)
-        _LOGGER.debug(f"{self.entity_id}: Found linked tamper sensor {self.linked_tamper_sensor}")
         if self.linked_tamper_sensor:
+            _LOGGER.debug(
+                "%s: Found linked tamper sensor %s",
+                self.entity_id,
+                self.linked_tamper_sensor,
+            )
             tamper_sensor_state = self.hass.states.get(self.linked_tamper_sensor)
+            assert tamper_sensor_state
             if tamper_sensor_state:
                 leak_chars.append(CHAR_STATUS_TAMPERED)
 
         serv_leak = self.add_preload_service(
-            SERV_LEAK_SENSOR, leak_chars,
+            SERV_LEAK_SENSOR,
+            leak_chars,
         )
         serv_leak.configure_char(
-            CHAR_NAME, value=f"{prefix} Leak"[:MAX_NAME_LENGTH],
+            CHAR_NAME,
+            value=f"{prefix} Leak"[:MAX_NAME_LENGTH],
         )
         self.char_leak_detected = serv_leak.configure_char(
-            CHAR_LEAK_DETECTED, value=0,
+            CHAR_LEAK_DETECTED,
+            value=0,
         )
 
         if CHAR_STATUS_TAMPERED in leak_chars:
             self.char_tamper_detected = serv_leak.configure_char(
-                CHAR_STATUS_TAMPERED, value=0,
+                CHAR_STATUS_TAMPERED,
+                value=0,
             )
             self._async_update_tamper_sensor_state(tamper_sensor_state)
 

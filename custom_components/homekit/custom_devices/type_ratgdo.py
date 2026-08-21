@@ -2,10 +2,19 @@
 
 import logging
 
-from ..pyhap.const import CATEGORY_LIGHTBULB
+from custom_components.homekit.accessories import TYPES, HomeAccessory
+from custom_components.homekit.const import (
+    CHAR_NAME,
+    CHAR_OCCUPANCY_DETECTED,
+    CHAR_ON,
+    MAX_NAME_LENGTH,
+    SERV_LIGHTBULB,
+    SERV_OCCUPANCY_SENSOR,
+)
+from custom_components.homekit.pyhap.const import CATEGORY_LIGHTBULB
 from pyhap.util import callback as pyhap_callback
 
-from homeassistant.components.light import DOMAIN as DOMAIN_LIGHT
+from homeassistant.components.light import DOMAIN as LIGHT_DOMAIN
 from homeassistant.const import (
     ATTR_ENTITY_ID,
     SERVICE_TURN_OFF,
@@ -15,17 +24,7 @@ from homeassistant.const import (
 from homeassistant.core import HassJobType, callback
 from homeassistant.helpers.event import async_track_state_change_event
 
-from ..accessories import TYPES, HomeAccessory
-from ..const import (
-    CHAR_NAME,
-    CHAR_OCCUPANCY_DETECTED,
-    CHAR_ON,
-    CONF_LINKED_OCCUPANCY_SENSOR,
-    CONF_SERVICE_NAME_PREFIX,
-    MAX_NAME_LENGTH,
-    SERV_LIGHTBULB,
-    SERV_OCCUPANCY_SENSOR,
-)
+from .const import CONF_LINKED_OCCUPANCY_SENSOR, CONF_SERVICE_NAME_PREFIX
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,22 +33,25 @@ _LOGGER = logging.getLogger(__name__)
 class RATGDO(HomeAccessory):
     """Generate a RATGDO accessory."""
 
-    def __init__(self, *args):
+    def __init__(self, *args) -> None:
         """Initialize a RATGDO accessory object."""
         super().__init__(*args, category=CATEGORY_LIGHTBULB)
         prefix = self.config.get(CONF_SERVICE_NAME_PREFIX, self.display_name)
 
         # Light
         state = self.hass.states.get(self.entity_id)
+        assert state
         light_chars = [
             CHAR_NAME,
         ]
         serv_light = self.add_preload_service(
-            SERV_LIGHTBULB, light_chars,
+            SERV_LIGHTBULB,
+            light_chars,
         )
         self.set_primary_service(serv_light)
         serv_light.configure_char(
-            CHAR_NAME, value=f"{prefix} Light"[:MAX_NAME_LENGTH],
+            CHAR_NAME,
+            value=f"{prefix} Light"[:MAX_NAME_LENGTH],
         )
         self.char_on = serv_light.configure_char(
             CHAR_ON, value=0, setter_callback=self.set_state
@@ -57,8 +59,12 @@ class RATGDO(HomeAccessory):
 
         # Occupancy Sensor
         self.linked_occupancy_sensor = self.config.get(CONF_LINKED_OCCUPANCY_SENSOR)
-        _LOGGER.debug(f"{self.entity_id}: Found linked occupancy sensor {self.linked_occupancy_sensor}")
         if self.linked_occupancy_sensor:
+            _LOGGER.debug(
+                "%s: Found linked occupancy sensor %s",
+                self.entity_id,
+                self.linked_occupancy_sensor,
+            )
             occupancy_sensor_state = self.hass.states.get(self.linked_occupancy_sensor)
             if occupancy_sensor_state:
                 occupancy_chars = [
@@ -66,14 +72,17 @@ class RATGDO(HomeAccessory):
                     CHAR_OCCUPANCY_DETECTED,
                 ]
                 serv_occupancy = self.add_preload_service(
-                    SERV_OCCUPANCY_SENSOR, occupancy_chars,
+                    SERV_OCCUPANCY_SENSOR,
+                    occupancy_chars,
                 )
                 serv_light.add_linked_service(serv_occupancy)
                 serv_occupancy.configure_char(
-                    CHAR_NAME, value=f"{prefix} Occupancy Detected"[:MAX_NAME_LENGTH],
+                    CHAR_NAME,
+                    value=f"{prefix} Occupancy Detected"[:MAX_NAME_LENGTH],
                 )
                 self.char_occupancy = serv_occupancy.configure_char(
-                    CHAR_OCCUPANCY_DETECTED, value=0,
+                    CHAR_OCCUPANCY_DETECTED,
+                    value=0,
                 )
                 self._async_update_occupancy_sensor_state(occupancy_sensor_state)
 
@@ -84,7 +93,7 @@ class RATGDO(HomeAccessory):
         _LOGGER.debug("%s: Set switch state to %s", self.entity_id, value)
         params = {ATTR_ENTITY_ID: self.entity_id}
         service = SERVICE_TURN_ON if value else SERVICE_TURN_OFF
-        self.async_call_service(DOMAIN_LIGHT, service, params)
+        self.async_call_service(LIGHT_DOMAIN, service, params)
 
     @callback
     @pyhap_callback
